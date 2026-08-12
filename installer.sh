@@ -25,7 +25,7 @@ VSCODE_URL="https://code.visualstudio.com/sha/download?build=stable&os=linux-x64
 TMPFILE="/tmp/vscode_$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12).tar.gz"
 
 # Target directory
-TARGET_DIR="$HOME/opt/vscode"
+TARGET_DIR="$HOME/opt/vscode/bin"
 VSCODE_BIN_PATH="$TARGET_DIR"
 
 # Detect shell and choose rc file
