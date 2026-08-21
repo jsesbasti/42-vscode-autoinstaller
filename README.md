@@ -16,5 +16,5 @@ This script installs VS Code in your home directory (`~/opt/vscode`), adds it to
 Run the installer in a single line:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/tomaquet18/42-vscode-autoinstaller/refs/heads/master/installer.sh | bash
+curl -sSL https://raw.githubusercontent.com/jsesbasti/42-vscode-autoinstaller/refs/heads/master/installer.sh | bash
 ```
