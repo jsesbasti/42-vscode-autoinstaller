@@ -16,6 +16,7 @@ echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════╗"
 echo -e "║${BOLD}     Visual Studio Code Installer Script       ${RESET}${CYAN}║"
 echo -e "║${BOLD}        Created by tomaquet18 (alefern2)       ${RESET}${CYAN}║"
+echo -e "║${BOLD}          Edited by jsebasti (jsebasti)        ${RESET}${CYAN}║"
 echo -e "╚═══════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
