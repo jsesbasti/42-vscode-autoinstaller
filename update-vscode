@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+set -e
+
+# Color definitions
+RED="\033[1;31m"
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+BLUE="\033[1;34m"
+MAGENTA="\033[1;35m"
+CYAN="\033[1;36m"
+BOLD="\033[1m"
+RESET="\033[0m"
+
+# Header
+echo -e "${CYAN}"
+echo "╔═══════════════════════════════════════════════╗"
+echo -e "║${BOLD}     Visual Studio Code Installer Script       ${RESET}${CYAN}║"
+echo -e "║${BOLD}        Created by tomaquet18 (alefern2)       ${RESET}${CYAN}║"
+echo -e "╚═══════════════════════════════════════════════╝"
+echo -e "${RESET}"
+
+VSCODE_URL="https://code.visualstudio.com/sha/download?build=stable&os=linux-x64"
+VSCODE_UPDATE_API="https://update.code.visualstudio.com/api/latest/linux-x64/stable"
+
+# Generate random temp filename
+TMPFILE="/tmp/vscode_$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12).tar.gz"
+
+# Target directory
+# Prefer sgoinfre (42 campus storage) if it exists and is writable,
+# otherwise fall back to ~/opt/vscode for non-42 / no-sgoinfre setups.
+if [ -d "$HOME/sgoinfre" ] && [ -w "$HOME/sgoinfre" ]; then
+    TARGET_DIR="$HOME/sgoinfre/vscode"
+    echo -e "${BLUE}sgoinfre detected, installing there.${RESET}"
+else
+    TARGET_DIR="$HOME/opt/vscode"
+    echo -e "${YELLOW}sgoinfre not found or not writable, falling back to $TARGET_DIR${RESET}"
+fi
+VSCODE_BIN_PATH="$TARGET_DIR/bin"
+
+# Detect shell and choose rc file
+case "$SHELL" in
+    */zsh)
+        RC_FILE="$HOME/.zshrc"
+        ;;
+    */bash)
+        RC_FILE="$HOME/.bashrc"
+        ;;
+    *)
+        echo -e "${YELLOW}Unknown shell ($SHELL), defaulting to .bashrc${RESET}"
+        RC_FILE="$HOME/.bashrc"
+        ;;
+esac
+echo -e "${BLUE}Using rc file:${RESET} $RC_FILE"
+
+# --- Version check: skip the whole update dance if already on latest stable ---
+# VS Code's public update API tells us the current stable version without
+# needing to download the full installer first.
+LATEST_VERSION=$(curl -sSL "$VSCODE_UPDATE_API" 2>/dev/null | grep -oP '"productVersion"\s*:\s*"\K[^"]+' || true)
+
+CURRENT_VERSION=""
+if [ -x "$VSCODE_BIN_PATH/code" ]; then
+    CURRENT_VERSION=$("$VSCODE_BIN_PATH/code" --version 2>/dev/null | head -n1 || true)
+fi
+
+if [ -n "$LATEST_VERSION" ] && [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
+    echo -e "${GREEN}Already up to date (version $CURRENT_VERSION). Nothing to do.${RESET}"
+    exit 0
+fi
+
+if [ -n "$LATEST_VERSION" ]; then
+    if [ -n "$CURRENT_VERSION" ]; then
+        echo -e "${YELLOW}Installed version: $CURRENT_VERSION — latest stable: $LATEST_VERSION. Updating...${RESET}"
+    else
+        echo -e "${YELLOW}No existing installation detected. Installing latest stable ($LATEST_VERSION)...${RESET}"
+    fi
+else
+    echo -e "${YELLOW}Could not reach the update API, proceeding with install/update anyway.${RESET}"
+fi
+
+# --- Handle existing installation (update case) ---
+if [ -d "$TARGET_DIR" ]; then
+    echo -e "${YELLOW}Existing installation found at $TARGET_DIR${RESET}"
+
+    # Best-effort: kill anything *on this machine* with open file handles
+    # inside TARGET_DIR. This helps in the common local case, but on 42's
+    # NFS-shared $HOME it often finds nothing, because the process holding
+    # the file can be running on a *different* cluster machine entirely
+    # (e.g. VS Code left open on another PC on campus) — invisible to
+    # fuser/lsof here and impossible to kill from this host.
+    if command -v fuser >/dev/null 2>&1; then
+        echo -e "${YELLOW}Checking for local processes with open files in $TARGET_DIR...${RESET}"
+        fuser -k "$TARGET_DIR" >/dev/null 2>&1 || true
+        sleep 1
+    elif command -v lsof >/dev/null 2>&1; then
+        PIDS=$(lsof -t +D "$TARGET_DIR" 2>/dev/null || true)
+        if [ -n "$PIDS" ]; then
+            echo -e "${YELLOW}Killing local processes with open files in $TARGET_DIR: $PIDS${RESET}"
+            kill $PIDS 2>/dev/null || true
+            sleep 1
+            kill -9 $PIDS 2>/dev/null || true
+        fi
+    fi
+
+    # Rather than requiring a full rm -rf to succeed before updating (which
+    # blocks forever if a handle is held open on another machine), rename
+    # the old install out of the way. A rename is just a metadata change on
+    # the parent directory entry, so it succeeds even if files inside it
+    # are still open elsewhere on the NFS share.
+    OLD_DIR="${TARGET_DIR}.old.$(date +%s)"
+    echo -e "${MAGENTA}Moving previous installation aside for update...${RESET}"
+    mv "$TARGET_DIR" "$OLD_DIR"
+
+    # Try to clean up the old copy in the background without blocking the
+    # install. If it's still busy (remote handle), it's simply left behind
+    # as leftover .nfsXXXXXXXX debris until that handle is released — it
+    # doesn't stop the new installation from proceeding.
+    ( rm -rf "$OLD_DIR" >/dev/null 2>&1 & )
+fi
+
+mkdir -p "$TARGET_DIR"
+
+echo -e "${MAGENTA}Downloading VS Code to $TMPFILE ...${RESET}"
+curl -sSL "$VSCODE_URL" -o "$TMPFILE"
+
+echo -e "${MAGENTA}Extracting VS Code...${RESET}"
+tar -xzf "$TMPFILE" -C "$TARGET_DIR" --strip-components=1
+
+echo -e "${MAGENTA}Cleaning up...${RESET}"
+rm -f "$TMPFILE"
+
+# Add PATH entry only if not already in rc file
+if ! grep -q "$VSCODE_BIN_PATH" "$RC_FILE" 2>/dev/null; then
+    echo -e "${BLUE}Adding VS Code path to $RC_FILE${RESET}"
+    {
+        echo ""
+        echo "# Add Visual Studio Code to PATH"
+        echo "export PATH=\"$VSCODE_BIN_PATH:\$PATH\""
+    } >> "$RC_FILE"
+else
+    echo -e "${YELLOW}VS Code path already present in $RC_FILE, skipping.${RESET}"
+fi
+
+# Verify the icon exists where we expect it before wiring it into the .desktop file
+ICON_PATH="${TARGET_DIR}/resources/app/resources/linux/code.png"
+if [ ! -f "$ICON_PATH" ]; then
+    echo -e "${YELLOW}Warning: icon not found at expected path ($ICON_PATH).${RESET}"
+    echo -e "${YELLOW}The desktop launcher will still be created, but the icon may not show.${RESET}"
+fi
+
+# Create desktop entry
+DESKTOP_FILE="$HOME/Desktop/vscode.desktop"
+DESKTOP_FILE_CONTENT="[Desktop Entry]
+Name=Visual Studio Code
+Comment=Code Editing. Redefined.
+Exec=${VSCODE_BIN_PATH}/code --no-sandbox %F
+Icon=${ICON_PATH}
+Type=Application
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=Code"
+
+mkdir -p "$HOME/Desktop"
+echo -e "${BLUE}Creating desktop entry at $DESKTOP_FILE ...${RESET}"
+echo "$DESKTOP_FILE_CONTENT" > "$DESKTOP_FILE"
+chmod +x "$DESKTOP_FILE"
+
+# Mark the .desktop file as trusted on GNOME/Nautilus so it doesn't
+# show up as "untrusted" and require a manual right-click > Allow Launching
+if command -v gio >/dev/null 2>&1; then
+    gio set "$DESKTOP_FILE" metadata::trusted true 2>/dev/null || true
+fi
+
+echo -e "${GREEN}\n✔ VS Code installed in $TARGET_DIR${RESET}"
+echo -e "${GREEN}Desktop launcher created: $DESKTOP_FILE${RESET}"
+
+# Automatically apply the new PATH to the current terminal session.
+# A plain `source "$RC_FILE"` here would only affect this script's own
+# subshell and be lost the moment the script exits, so instead we
+# `exec` a fresh login shell in its place. This replaces the script's
+# process with a new shell that re-reads "$RC_FILE" itself, meaning
+# the updated PATH shows up immediately in the same terminal window
+# with no manual "source" step needed.
+echo -e "${MAGENTA}Reloading shell to apply PATH changes...${RESET}"
+exec "$SHELL" -l

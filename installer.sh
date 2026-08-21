@@ -19,14 +19,28 @@ echo -e "║${BOLD}        Created by tomaquet18 (alefern2)       ${RESET}${CYAN
 echo -e "╚═══════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
-VSCODE_URL="https://code.visualstudio.com/sha/download?build=stable&os=linux-x64"
+UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/jsesbasti/42-vscode-autoinstaller/master/update-vscode"
+BIN_DIR="$HOME/bin"
+UPDATE_SCRIPT_PATH="$BIN_DIR/update-vscode"
 
-# Generate random temp filename
-TMPFILE="/tmp/vscode_$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12).tar.gz"
+# Make sure $HOME/bin exists
+if [ ! -d "$BIN_DIR" ]; then
+    echo -e "${BLUE}Creating $BIN_DIR ...${RESET}"
+    mkdir -p "$BIN_DIR"
+else
+    echo -e "${YELLOW}$BIN_DIR already exists, skipping creation.${RESET}"
+fi
 
-# Target directory
-TARGET_DIR="$HOME/opt/vscode/bin"
-VSCODE_BIN_PATH="$TARGET_DIR"
+# Fetch update-vscode only if it isn't already there
+if [ ! -f "$UPDATE_SCRIPT_PATH" ]; then
+    echo -e "${MAGENTA}Downloading update-vscode to $UPDATE_SCRIPT_PATH ...${RESET}"
+    curl -sSL "$UPDATE_SCRIPT_URL" -o "$UPDATE_SCRIPT_PATH"
+else
+    echo -e "${YELLOW}update-vscode already present in $BIN_DIR, skipping download.${RESET}"
+fi
+
+echo -e "${BLUE}Making update-vscode executable...${RESET}"
+chmod +x "$UPDATE_SCRIPT_PATH"
 
 # Detect shell and choose rc file
 case "$SHELL" in
@@ -41,54 +55,20 @@ case "$SHELL" in
         RC_FILE="$HOME/.bashrc"
         ;;
 esac
-
 echo -e "${BLUE}Using rc file:${RESET} $RC_FILE"
 
-echo -e "${MAGENTA}Downloading VS Code to $TMPFILE ...${RESET}"
-curl -sSL "$VSCODE_URL" -o "$TMPFILE"
-
-echo -e "${MAGENTA}Preparing install directory: $TARGET_DIR${RESET}"
-rm -rf "$TARGET_DIR"
-mkdir -p "$TARGET_DIR"
-
-echo -e "${MAGENTA}Extracting VS Code...${RESET}"
-tar -xzf "$TMPFILE" -C "$TARGET_DIR" --strip-components=1
-
-echo -e "${MAGENTA}Cleaning up...${RESET}"
-rm -f "$TMPFILE"
-
-# Add PATH entry only if not already in rc file
-if ! grep -q "$VSCODE_BIN_PATH" "$RC_FILE" 2>/dev/null; then
-    echo -e "${BLUE}Adding VS Code path to $RC_FILE${RESET}"
+# Add $HOME/bin to PATH only if it isn't already there
+if [[ ":$PATH:" == *":$BIN_DIR:"* ]]; then
+    echo -e "${YELLOW}$BIN_DIR already in PATH, skipping.${RESET}"
+else
+    echo -e "${BLUE}Adding $BIN_DIR to PATH in $RC_FILE${RESET}"
     {
         echo ""
-        echo "# Add Visual Studio Code to PATH"
-        echo "export PATH=\"$VSCODE_BIN_PATH:\$PATH\""
+        echo "# Add $BIN_DIR to PATH"
+        echo "export PATH=\"$BIN_DIR:\$PATH\""
     } >> "$RC_FILE"
-else
-    echo -e "${YELLOW}VS Code path already present in $RC_FILE, skipping.${RESET}"
 fi
 
-# Create desktop entry
-DESKTOP_FILE="$HOME/Desktop/vscode.desktop"
-mkdir -p "$HOME/Desktop"
-
-echo -e "${BLUE}Creating desktop entry at $DESKTOP_FILE ...${RESET}"
-cat > "$DESKTOP_FILE" <<EOF
-[Desktop Entry]
-Name=Visual Studio Code
-Comment=Code Editing. Redefined.
-Exec=$HOME/opt/vscode/code --no-sandbox %F
-Icon=$HOME/opt/vscode/resources/app/resources/linux/code.png
-Type=Application
-Terminal=false
-Categories=Development;IDE;
-StartupWMClass=Code
-EOF
-
-chmod +x "$DESKTOP_FILE"
-
-echo -e "${GREEN}\n✔ VS Code installed in $TARGET_DIR${RESET}"
-echo -e "${GREEN}Desktop launcher created: $DESKTOP_FILE${RESET}"
+echo -e "${GREEN}\n✔ update-vscode installed in $BIN_DIR${RESET}"
 echo -e "\nReload your shell to apply PATH changes:"
 echo -e "    ${BOLD}source $RC_FILE${RESET}\n"
