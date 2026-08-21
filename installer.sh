@@ -73,3 +73,4 @@ fi
 echo -e "${GREEN}\n✔ update-vscode installed in $BIN_DIR${RESET}"
 echo -e "\nReload your shell to apply PATH changes:"
 echo -e "    ${BOLD}source $RC_FILE${RESET}\n"
+exec "$SHELL" -l
