@@ -16,7 +16,7 @@ echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════╗"
 echo -e "║${BOLD}   VS Code / VSCodium Installer Script         ${RESET}${CYAN}║"
 echo -e "║${BOLD}      Created by tomaquet18 (alefern2)         ${RESET}${CYAN}║"
-echo -e "║${BOLD}      Edited by jsebasti (jsebasti)            ${RESET}${CYAN}║"
+echo -e "║${BOLD}         Edited by jsebasti (jsebasti)         ${RESET}${CYAN}║"
 echo -e "╚═══════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
@@ -132,10 +132,17 @@ else
     # also need to grab the matching linux-x64 .tar.gz asset's direct URL.
     RELEASE_JSON=$(curl -sSL "$VERSION_API" 2>/dev/null || true)
     LATEST_VERSION=$(echo "$RELEASE_JSON" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -n1 || true)
+    # VSCodium's release assets include several linux-x64 .tar.gz files, e.g.:
+    #   VSCodium-linux-x64-<version>.tar.gz       <- full desktop app (what we want)
+    #   vscodium-reh-linux-x64-<version>.tar.gz   <- headless "Remote Extension
+    #                                                 Host" server build, just a
+    #                                                 single CLI binary, no GUI
+    # A loose "contains linux-x64 and ends in .tar.gz" match can pick the reh
+    # build instead, which extracts to a single non-functional "codium" binary.
+    # The real package name is capitalized ("VSCodium-..."), the reh one isn't,
+    # so match that prefix case-sensitively to grab the right asset.
     DOWNLOAD_URL=$(echo "$RELEASE_JSON" \
-        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]+' \
-        | grep -i 'linux-x64' \
-        | grep '\.tar\.gz$' \
+        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*VSCodium-linux-x64-[^"]*\.tar\.gz' \
         | head -n1 || true)
 fi
 
